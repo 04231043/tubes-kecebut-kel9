@@ -1,7 +1,7 @@
 # Validasi teknis dan persiapan demo UAS
 
 Proyek: Forecasting Air Quality, Teknik Elektro ITK, Kelas B Kelompok 9
-Revisi: 28 November 2026
+Revisi: 29 November 2026
 
 ## 1. Perbaikan dari versi online sebelumnya
 
@@ -64,7 +64,7 @@ Semua model di bawah memprakirakan 5 Februari 2005 pukul 03.00. CO aktual 1,6 mg
 
 ## 4. Hasil QA lokal
 
-- 14 tes otomatis lulus (`test_pipeline` dan `test_dashboard`). Cakupan mencakup empat checkpoint, metrik uji dan validasi, split kronologis, transformasi data latih, konvergensi, aturan fuzzy, integritas bundle, delapan halaman, navigasi ringkasan, serta prakiraan manual dan validasi CSV.
+- 15 tes otomatis lulus (`test_pipeline` dan `test_dashboard`). Pengujian memeriksa empat checkpoint, metrik uji dan validasi, split kronologis, transformasi data latih, integritas bundle, jumlah dan isi grafik di delapan halaman, serta alur prakiraan manual dan CSV.
 - Browser lokal: ringkasan, EDA, input manual, CSV, perbandingan dan unduhan hasil tersedia. Tidak ada exception halaman pada uji terakhir.
 - Notebook mandiri: semua sel kode berhasil dieksekusi menggunakan CSV UCI asli yang telah diunduh. Empat checkpoint, prediksi, dan ZIP artefak berhasil dibuat.
 - Data baru/CSV alternatif perlu divalidasi sebelum membuat klaim kinerja lapangan.

@@ -10,9 +10,11 @@ TE2514031 Kecerdasan Buatan · Teknik Elektro ITK · Kelas B · Kelompok 9 · Ga
 
 </div>
 
-[![Ringkasan dashboard Pantau CO dengan navigasi, metrik model hibrida dan grafik aktual versus prakiraan](docs/dashboard.png)](https://tubes-kecebut-kel9.streamlit.app/)
+[![Ringkasan Pantau CO dengan grafik aktual versus prakiraan, metrik uji, dan diagram arsitektur](docs/dashboard.png)](https://tubes-kecebut-kel9.streamlit.app/)
 
 Pantau CO menggunakan riwayat sensor kimia, suhu, dan kelembapan untuk memprakirakan konsentrasi karbon monoksida (CO) satu jam setelah pengamatan terakhir. Sumbernya adalah 9.357 pengamatan per jam dari satu lokasi pada 2004–2005. [UCI Air Quality](https://doi.org/10.24432/C59K5F)
+
+Pada **Ringkasan**, grafik interaktif menampilkan nilai CO aktual dan prakiraan hibrida pada 96 jam pertama periode uji. Diagram di bawah grafik memperlihatkan alur pelatihan dan prakiraan.
 
 ## Coba prakiraan
 
