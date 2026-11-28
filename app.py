@@ -4,44 +4,29 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import altair as alt
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
 import streamlit as st
 
 from air_data import FEATURES, TARGET, official_csv, read_data
+from dashboard_ui import (
+    COLORS, GRID_COLOR, INK, PAPER, footer, hero, init_style, overview_metrics,
+    page_header, sidebar_brand, sidebar_status, show_altair,
+)
 from evaluation import MODEL_LABELS as MODELS, comparison, error_groups
 from fuzzy_system import ACTIONS, GRID, IN_CENTERS, LEVELS, OUT_CENTERS, fuzzy_detail, memberships
 from inference import DEFAULT, forecast, load_run, sample_input, verify_bundle
 from train import run
 
-st.set_page_config(page_title="Air Quality Lab · Kelompok 9", page_icon="🌿", layout="wide")
-PAGES = ["Ringkasan", "Eksplorasi data", "Seleksi fitur GA", "Optimasi PSO", "Jaringan saraf",
-         "Aturan fuzzy", "Prediksi dan simulasi", "Perbandingan model"]
-SUBTITLES = ["Overview", "Dataset Explorer", "GA Optimization", "PSO Optimization",
-             "Neural Network", "Fuzzy Inference", "Prediction / Simulation", "Model Comparison"]
-COLORS = ["#087C75", "#4263AD", "#C56D34", "#8048A2", "#627488"]
-INK, GRID_COLOR, PAPER = "#172E40", "#DDE6EA", "#FFFFFF"
+st.set_page_config(page_title="Pantau CO · Air Quality Lab", page_icon=":material/air:", layout="wide")
+PAGES = ["Ringkasan", "Eksplorasi Data", "Seleksi Fitur", "Optimasi PSO", "Jaringan Saraf",
+         "Fuzzy Logic", "Prakiraan CO", "Evaluasi Model"]
 MEMBERS = [("Ariyo Arianto", "04231013"), ("Jhosua George Kamagi", "04231043"),
            ("Vandri Afli Navi Almas", "04231089"), ("Bernadt Jansen Rajagukguk", "04221062")]
 
-st.markdown("""
-<style>
-[data-testid="stAppViewContainer"] .block-container {max-width: 1320px; padding-top: 4.25rem; padding-bottom: 2rem;}
-[data-testid="stSidebar"] {border-right: 1px solid #dbe7ea;}
-[data-testid="stSidebar"] h1 {letter-spacing: -.04em; font-size: 1.65rem;}
-[data-testid="stMetricValue"] {font-weight: 650; letter-spacing: -.04em;}
-[data-testid="stMetricLabel"] p {font-weight: 550;}
-[data-testid="stVerticalBlockBorderWrapper"] {background-color: #fff; border-radius: 12px;}
-.aq-eyebrow {color: #087c75; text-transform: uppercase; letter-spacing: .14em; font-weight: 750; font-size: .76rem; margin-bottom: .25rem;}
-.aq-hero {background: #102e3e; color: #effaff; padding: 26px 30px; border-radius: 16px; margin: 0 0 18px;}
-.aq-hero p {color: #b9d5df; font-size: 1.02rem; margin-bottom: .35rem;}
-.aq-hero h2 {color: #fff; margin: 0 0 .5rem; letter-spacing: -.035em; font-size: 2.05rem; line-height: 1.2;}
-.aq-tag {font-size: .74rem; font-weight: 650; letter-spacing: .08em; color: #6bdccb; text-transform: uppercase;}
-</style>
-""", unsafe_allow_html=True)
-
+init_style()
 directory = Path(st.session_state.get("active_run", DEFAULT))
 
 
@@ -78,11 +63,12 @@ def metric_row(items):
         col.metric(label, value, border=True, help=rest[0] if rest else None)
 
 
-def page_title(index, title, description=None):
-    st.markdown(f'<div class="aq-eyebrow">0{index + 1} / {SUBTITLES[index]}</div>', unsafe_allow_html=True)
-    st.title(title)
-    if description:
-        st.caption(description)
+def page_title(index, title, description):
+    page_header(PAGES[index], title, description)
+
+
+def open_page(page):
+    st.session_state["navigation"] = page
 
 
 def plot_histories(logs, xlabel, ylabel):
@@ -95,18 +81,34 @@ def plot_histories(logs, xlabel, ylabel):
     draw(fig)
 
 
-def actual_plot(predictions, column, hours, offset=0):
+def actual_plot(predictions, column, hours, offset=0, height=255, forecast_label=None):
     subset = predictions.set_index("timestamp_target").sort_index()
     first = subset.index[0] + pd.Timedelta(hours=offset)
-    subset = subset.loc[first:first + pd.Timedelta(hours=hours-1)].asfreq("h")
-    fig, ax = chart("Waktu target", "CO (mg/m³)")
-    ax.plot(subset.index, subset.aktual, color="#68808D", label="Aktual", linewidth=1.45)
-    ax.plot(subset.index, subset[column], color=COLORS[0], label=MODELS[column], linewidth=1.8)
-    ax.legend(frameon=False, ncol=2, fontsize=9)
-    locator = mdates.AutoDateLocator(minticks=3, maxticks=7)
-    ax.xaxis.set_major_locator(locator)
-    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
-    draw(fig)
+    timeline = pd.date_range(first, periods=hours, freq="h", name="Waktu target")
+    forecast_label = forecast_label or MODELS[column]
+    wide = (subset.reindex(timeline)[["aktual", column]]
+            .rename(columns={"aktual": "Aktual", column: forecast_label}).reset_index())
+    # Keep the source's wall-clock timestamps identical across browser time zones.
+    wide["Waktu target"] = wide["Waktu target"].dt.tz_localize("UTC")
+    long = wide.melt(id_vars="Waktu target", var_name="Seri", value_name="CO")
+    time_scale = alt.Scale(type="utc")
+    time = alt.X("Waktu target:T", scale=time_scale,
+                 axis=alt.Axis(title=None, format="%d/%m %H:%M", tickCount=5, labelOverlap="greedy"))
+    co = alt.Y("CO:Q", title="CO (mg/m³)", scale=alt.Scale(zero=True))
+    series = alt.Color("Seri:N", legend=alt.Legend(title=None),
+                       scale=alt.Scale(domain=["Aktual", forecast_label], range=["#667d8f", COLORS[0]]))
+    lines = (alt.Chart(long).mark_line(strokeWidth=2.3, invalid="break-paths-filter-domains")
+             .encode(x=time, y=co, color=series))
+    nearest = alt.selection_point(fields=["Waktu target"], nearest=True, on="pointerover",
+                                  clear="pointerout", empty=False)
+    tooltip = [alt.Tooltip("Waktu target:T", timeUnit="utcyearmonthdatehoursminutes",
+                           title="Waktu target", format="%d/%m/%Y %H:%M")]
+    tooltip.extend(alt.Tooltip(f"{label}:Q", format=".3f") for label in ["Aktual", forecast_label])
+    hover = (alt.Chart(wide).mark_rule(color="#9fb5b7")
+             .encode(x=alt.X("Waktu target:T", scale=time_scale), opacity=alt.when(nearest).then(alt.value(1)).otherwise(alt.value(0)),
+                     tooltip=tooltip).add_params(nearest))
+    points = alt.Chart(long).mark_circle(size=48).encode(x=time, y=co, color=series).transform_filter(nearest)
+    show_altair(lines + hover + points, height)
 
 
 def measure(value, places=3):
@@ -127,7 +129,7 @@ def fit_notes():
 
 # Check the manifest on every new render; cached tables are keyed by its hash.
 try:
-    manifest = verify_bundle(directory)
+    verify_bundle(directory)
     bundle_hash = sha256((directory / "bundle_manifest.json").read_bytes()).hexdigest()
     info, predictions, daily, corr = read_bundle(str(directory), bundle_hash)
 except (OSError, ValueError, KeyError, TypeError) as error:
@@ -144,15 +146,10 @@ if "R² uji" in model_table and model_table["R² uji"].notna().any():
 else:
     best_r2 = None
 
-st.sidebar.title("Air Quality Lab")
-st.sidebar.caption("TE2514031 · Teknik Elektro ITK")
-st.sidebar.markdown("**KELOMPOK 09 / KELAS B**")
-page = st.sidebar.radio("Navigasi", PAGES, label_visibility="collapsed")
-st.sidebar.divider()
-st.sidebar.markdown("**Eksperimen terverifikasi**")
-st.sidebar.caption(f"{info['source_kind']} · {stats['rows']:,} jam")
-st.sidebar.caption("Prakiraan CO +1 jam · mg/m³\nBukan feed sensor real-time.")
-st.sidebar.link_button("Sumber dataset UCI", "https://doi.org/10.24432/C59K5F", width="stretch")
+sidebar_brand()
+page = st.sidebar.radio("Navigasi", PAGES, key="navigation", label_visibility="collapsed")
+sidebar_status(directory != DEFAULT)
+st.sidebar.link_button("Sumber data UCI", "https://doi.org/10.24432/C59K5F", icon=":material/open_in_new:", width="stretch")
 if directory != DEFAULT:
     st.sidebar.warning("Eksperimen sesi ini aktif.")
     if st.sidebar.button("Kembali ke eksperimen UCI"):
@@ -162,51 +159,45 @@ if directory != DEFAULT:
 
 
 if page == PAGES[0]:
-    st.markdown("""
-    <section class="aq-hero">
-      <div class="aq-tag">Tugas besar kecerdasan buatan · Gasal 2026/2027</div>
-      <h2>Prakiraan kualitas udara<br>berbasis AI hibrida</h2>
-      <p>Sensor → GA → PSO → RNN → Fuzzy · CO satu jam ke depan</p>
-      <p>Dataset historis dan checkpoint nyata, bukan angka simulasi acak.</p>
-    </section>
-    """, unsafe_allow_html=True)
-    metric_row([("Observasi per jam", f"{stats['rows']:,}"),
-                ("Fitur hibrida", f"{len(hybrid['features'])} / {len(FEATURES)}"),
-                ("MAE hibrida", f"{hybrid['test']['mae']:.3f} mg/m³"),
-                ("RMSE hibrida", f"{hybrid['test']['rmse']:.3f} mg/m³")])
-    st.subheader("Aktual vs prakiraan hibrida")
-    st.caption("96 jam pertama periode uji. Bagian kosong menunjukkan target yang tidak tersedia atau jendela tidak memenuhi syarat.")
-    with st.container(border=True):
-        actual_plot(predictions, "hybrid", 96)
-    left, right = st.columns([1.55, 1])
+    hero()
+    with st.container(key="overview_actions", horizontal=True, gap="small"):
+        st.button("Coba prakiraan", icon=":material/arrow_forward:", type="primary",
+                  on_click=open_page, args=(PAGES[6],))
+        st.button("Bandingkan model", icon=":material/bar_chart:", on_click=open_page, args=(PAGES[7],))
+    overview_metrics([
+        ("Observasi per jam", f"{stats['rows']:,}".replace(",", "."),
+         "Dataset UCI Air Quality" if directory == DEFAULT else "Dataset pelatihan sesi"),
+        ("Fitur model hibrida", f"{len(hybrid['features'])} / {len(FEATURES)}", "Kanal dipilih oleh GA"),
+        ("MAE hibrida", f"{hybrid['test']['mae']:.3f}".replace(".", ","), "mg/m³ · data uji"),
+        ("RMSE hibrida", f"{hybrid['test']['rmse']:.3f}".replace(".", ","), "mg/m³ · data uji"),
+    ])
+    left, right = st.columns([2.45, 1], gap="medium")
     with left:
-        st.subheader("Arsitektur")
-        st.graphviz_chart("""digraph { rankdir=TB; graph [bgcolor="transparent", nodesep=.15, ranksep=.23];
-            node [shape=box, style="rounded,filled", fillcolor="#e6f2f1", color="#90b6b8", fontname="Arial"];
-            edge [color="#78909b"];
-            "UCI: latih + validasi" -> "GA: subset sensor" -> "PSO: konfigurasi RNN" -> "Checkpoint RNN";
-            "Riwayat sensor sampai t" -> "RNN terlatih";
-            "Checkpoint RNN" -> "RNN terlatih" -> "CO(t+1) [mg/m³]" -> "Fuzzy: prioritas verifikasi"; }
-        """)
+        with st.container(border=True, key="overview_chart"):
+            st.subheader("Aktual vs prakiraan hibrida")
+            st.caption("96 jam pertama dari periode uji")
+            actual_plot(predictions, "hybrid", 96, height=230, forecast_label="Prakiraan hibrida")
+            st.caption("Jeda pada garis menandai jam tanpa target yang dapat dievaluasi.")
     with right:
-        st.subheader("Hasil evaluasi")
-        st.markdown(f"**MAE terendah:** {best_mae['Model']}  \n{best_mae['MAE uji']:.4f} mg/m³")
-        st.markdown(f"**RMSE terendah:** {best_rmse['Model']}  \n{best_rmse['RMSE uji']:.4f} mg/m³")
-        st.caption(f"Empat model memakai {len(predictions):,} jam target uji yang sama. "
-                   "Fuzzy menentukan prioritas verifikasi, bukan meningkatkan akurasi prediksi.")
-        st.subheader("Tim proyek")
+        with st.container(border=True, key="overview_summary"):
+            st.subheader("Hasil evaluasi")
+            st.caption(f"Empat model · {len(predictions):,} target uji yang sama".replace(",", "."))
+            for label, result, metric in [("MAE terendah", best_mae, "MAE uji"),
+                                          ("RMSE terendah", best_rmse, "RMSE uji")]:
+                value = f"{result[metric]:.4f}".replace(".", ",")
+                st.markdown(f"**{value} mg/m³**  \n{label} · {result['Model']}")
+    with st.expander("Metode dan tim proyek"):
+        st.markdown("**GA** memilih kanal sensor. **PSO** mencari konfigurasi **RNN** untuk memprakirakan CO. "
+                    "**Fuzzy Mamdani** menentukan prioritas verifikasi sensor dari hasil prakiraan.")
         st.dataframe(pd.DataFrame(MEMBERS, columns=["Nama", "NIM"]), hide_index=True, width="stretch")
-    with st.expander("Bukti keterulangan dan panduan demo"):
         fit_notes()
         st.code(f"SHA-256 CSV: {info['source_sha256']}\nBundle: {bundle_hash}", language=None)
         st.download_button("Unduh log eksperimen JSON", (directory / "experiment.json").read_bytes(),
                            "experiment.json", "application/json")
-        st.write("Mulai dari Eksplorasi data → GA → PSO → Jaringan saraf → Aturan fuzzy → "
-                 "Prediksi dan simulasi → Perbandingan model. Prediksi default bekerja tanpa melatih ulang.")
 
 
 elif page == PAGES[1]:
-    page_title(1, "Eksplorasi data", "Observasi historis sebelum imputasi · kode −200 dianggap data hilang")
+    page_title(1, "Eksplorasi Data", "Observasi historis sebelum imputasi. Kode −200 menandai data hilang.")
     summary = pd.DataFrame(stats["summary"]).set_index("variabel")
     table = summary[["observed", "missing", "min", "median", "max"]].copy()
     table["hilang (%)"] = table.missing / stats["rows"] * 100
@@ -446,7 +437,7 @@ elif page == PAGES[5]:
 
 
 elif page == PAGES[6]:
-    page_title(6, "Prediksi dan simulasi", "Inference dari checkpoint tanpa pelatihan ulang")
+    page_title(6, "Prakiraan CO", "Gunakan model terlatih untuk menghitung konsentrasi karbon monoksida satu jam ke depan.")
     key = st.selectbox("Konfigurasi model", list(MODELS), format_func=MODELS.get, index=3)
     spec = info["models"][key]
     length, cols = spec["params"]["length"], spec["features"]
@@ -495,7 +486,7 @@ elif page == PAGES[6]:
         with st.expander("Rentang sensor pada data latih"):
             st.table(pd.DataFrame([{"Kanal": col, **info["train_ranges"][col]} for col in cols]).round(4))
     with batch:
-        st.caption(f"Kolom wajib: timestamp, {', '.join(cols)}. CSV boleh memuat lebih banyak kolom numerik.")
+        st.caption(f"Kolom wajib: timestamp, {', '.join(cols)}. Kolom tambahan boleh disertakan.")
         st.download_button("Unduh contoh CSV", sample.to_csv(index=False), "contoh_sensor.csv", "text/csv")
         csv = st.file_uploader("Riwayat per jam", type="csv", key="forecast_csv")
         if csv is not None:
@@ -533,7 +524,7 @@ elif page == PAGES[6]:
 
 
 else:
-    page_title(7, "Perbandingan model", "Ablation study: empat model dilatih independen pada protokol yang sama")
+    page_title(7, "Evaluasi Model", "Bandingkan galat dari empat konfigurasi RNN pada target uji yang sama.")
     metric_row([("Target uji identik", f"{len(predictions):,}"),
                 ("MAE terbaik", f"{best_mae['MAE uji']:.4f}", best_mae["Model"]),
                 ("RMSE terbaik", f"{best_rmse['RMSE uji']:.4f}", best_rmse["Model"]),
@@ -587,3 +578,5 @@ else:
                       "prediksi_validasi.csv", "text/csv")
     st.caption("Batasan: satu dataset historis, satu split temporal, dan satu inisialisasi untuk pelatihan akhir. "
                "Hasil tidak menjamin kinerja pada kota, tahun, atau sensor yang berbeda.")
+
+footer()

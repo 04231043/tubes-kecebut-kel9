@@ -1,6 +1,7 @@
 """Hourly UCI observations, chronological partitions and train-only transforms."""
+from csv import Error as CSVError, Sniffer, reader
 from hashlib import sha256
-from io import BytesIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from urllib.request import urlopen
 from zipfile import ZipFile
@@ -39,13 +40,35 @@ def numbers(series):
     return values.replace(-200, np.nan)
 
 
-def read_data(file, required, require_contiguous=True):
+def _read_csv_frame(file):
+    raw = file.read() if hasattr(file, "read") else Path(file).read_bytes()
+    text = raw.decode("utf-8-sig") if isinstance(raw, bytes) else raw.removeprefix("\ufeff")
+    source = StringIO(text.lstrip())
+    first_line = source.readline()
+    if not first_line:
+        raise ValueError("CSV tidak memuat baris observasi.")
+    try:
+        delimiter = Sniffer().sniff(first_line, delimiters=",;\t|").delimiter
+    except CSVError:
+        delimiter = ","
+
+    source.seek(0)
+    try:
+        # Read the original header before pandas can rename duplicate fields.
+        columns = next(reader(source, delimiter=delimiter, strict=True))
+        source.seek(0)
+        data = pd.read_csv(source, sep=delimiter, header=None, engine="python", dtype=str)
+    except (CSVError, pd.errors.ParserError) as error:
+        raise ValueError("Format CSV tidak valid. Periksa jumlah kolom dan tanda kutip.") from error
+    return data.iloc[1:].set_axis(columns, axis="columns")
+
+
+def read_data(file, required, require_contiguous=True, *, required_only=False):
     """Accept the original UCI CSV or an ISO timestamp CSV, including forecast-only inputs."""
-    data = file if isinstance(file, pd.DataFrame) else pd.read_csv(
-        file, sep=None, engine="python", dtype=str, encoding="utf-8-sig")
+    data = file if isinstance(file, pd.DataFrame) else _read_csv_frame(file)
     data = data.dropna(how="all").copy()
-    data.columns = data.columns.str.strip()
-    data = data.loc[:, ~data.columns.str.startswith("Unnamed:")]
+    data.columns = pd.Index([str(name).strip() for name in data.columns])
+    data = data.loc[:, (data.columns != "") & ~data.columns.str.startswith("Unnamed:")]
     if data.empty:
         raise ValueError("CSV tidak memuat baris observasi.")
     if data.columns.duplicated().any():
@@ -71,7 +94,10 @@ def read_data(file, required, require_contiguous=True):
     absent = [name for name in required if name not in data]
     if absent:
         raise ValueError("Kolom wajib belum ada: " + ", ".join(absent))
-    values = data.apply(numbers)
+    selected = data[list(required)] if required_only else data
+    if not len(selected.columns):
+        raise ValueError("CSV tidak memuat kolom pengukuran.")
+    values = selected.apply(numbers)
     if TARGET in required and (values[TARGET].dropna() < 0).any():
         raise ValueError("Konsentrasi CO tidak boleh negatif, kecuali kode -200 untuk data hilang.")
     values.index = pd.DatetimeIndex(times, name="timestamp")

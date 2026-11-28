@@ -42,14 +42,14 @@ Q90 dihitung dari validasi setelah pemilihan checkpoint. Rentang perkiraan ± Q9
 
 ## 3. Skenario demo
 
-1. Buka Ringkasan: jelaskan horizon +1 jam, artefak aktual dan alur GA–PSO–RNN–FIS.
-2. Eksplorasi data: bedakan 9.357 observasi per jam, nilai CO teramati, data hilang, dan jumlah target yang lolos filter tiap split.
-3. Seleksi fitur GA: tunjukkan kromosom, fitness, seed, convergence, dan perbandingan baseline/GA.
-4. Optimasi PSO: demonstrasikan ruang pencarian seluruh sensor dan hasil GA, gbest serta parameter terpilih.
-5. Jaringan saraf: pilih keempat model untuk memperlihatkan checkpoint, training–validation curves, scatter dan residual.
-6. Aturan fuzzy: ubah CO contoh dari 0 ke 3 lalu 15 mg/m³. Jelaskan min–max, centroid dan skor internal.
-7. Prediksi dan simulasi: klik Hitung prakiraan, lalu unduh CSV dan unggah kembali. Coba pilih model PSO dan hitung ulang. Hilangkan satu nilai sensor untuk menunjukkan imputasi; jika satu kanal kosong selama empat jam terakhir, sistem menolak prediksi.
-8. Perbandingan model: jelaskan trade-off fitur, MAE, RMSE, R², biaya komputasi dan kecenderungan galat saat CO tinggi.
+1. Di **Ringkasan**, jelaskan horizon +1 jam, artefak eksperimen, dan alur GA–PSO–RNN–FIS.
+2. Di **Eksplorasi Data**, bedakan 9.357 observasi per jam, nilai CO teramati, data hilang, dan jumlah target valid tiap bagian.
+3. Di **Seleksi Fitur**, tunjukkan kromosom, fitness, seed, konvergensi, dan perbandingan RNN dasar dengan GA + RNN.
+4. Di **Optimasi PSO**, demonstrasikan ruang pencarian seluruh sensor dan hasil GA, gbest serta parameter terpilih.
+5. Di **Jaringan Saraf**, pilih keempat model untuk memperlihatkan checkpoint, kurva pelatihan dan validasi, scatter, dan residual.
+6. Di **Fuzzy Logic**, ubah CO contoh dari 0 ke 3 lalu 15 mg/m³. Jelaskan min–max, centroid, dan skor internal.
+7. Di **Prakiraan CO**, klik **Hitung prakiraan**. Di tab **Unggah CSV**, unduh contoh riwayat sensor lalu unggah kembali. Pilih model PSO + RNN dan hitung ulang. Hilangkan satu nilai sensor untuk menunjukkan imputasi. Jika satu kanal kosong sepanjang empat jam terakhir, sistem menolak prakiraan.
+8. Di **Evaluasi Model**, jelaskan trade-off fitur, MAE, RMSE, R², biaya komputasi dan kecenderungan galat saat CO tinggi.
 
 ### Keluaran demo historis
 
@@ -64,7 +64,7 @@ Semua model di bawah memprakirakan 5 Februari 2005 pukul 03.00. CO aktual 1,6 mg
 
 ## 4. Hasil QA lokal
 
-- 13 test otomatis lulus (test_pipeline dan test_dashboard): keempat checkpoint, metrik uji/validasi, split kronologis dan train-only transform, konvergensi, fuzzy monotonicity, input rusak, kualitas input, integritas bundle, semua halaman dan unggah CSV.
+- 14 tes otomatis lulus (`test_pipeline` dan `test_dashboard`). Cakupan mencakup empat checkpoint, metrik uji dan validasi, split kronologis, transformasi data latih, konvergensi, aturan fuzzy, integritas bundle, delapan halaman, navigasi ringkasan, serta prakiraan manual dan validasi CSV.
 - Browser lokal: ringkasan, EDA, input manual, CSV, perbandingan dan unduhan hasil tersedia. Tidak ada exception halaman pada uji terakhir.
 - Notebook mandiri: semua sel kode berhasil dieksekusi menggunakan CSV UCI asli yang telah diunduh. Empat checkpoint, prediksi, dan ZIP artefak berhasil dibuat.
 - Data baru/CSV alternatif perlu divalidasi sebelum membuat klaim kinerja lapangan.
@@ -76,11 +76,11 @@ Semua model di bawah memprakirakan 5 Februari 2005 pukul 03.00. CO aktual 1,6 mg
 | 12 | EDA, kamus fitur, statistik missing, pembagian train/val/test, baseline | Selesai lokal |
 | 13 | GA, fitness, 3 seed, log konvergensi, fitur dan baseline vs GA | Selesai lokal |
 | 14 | PSO, training RNN, parameter, empat model, checkpoint dan kurva | Selesai lokal |
-| 15 | FIS, inferensi end-to-end, 8 halaman, manual/CSV, requirements, QA | Selesai lokal; deployment revisi menunggu akses tulis GitHub |
+| 15 | FIS, inferensi end-to-end, 8 halaman, manual/CSV, requirements, QA | Tersedia di dashboard |
 | 16 | Panduan demo, source, config, seed, logs, pengujian | Siap demo lokal; presentasi/video, kontribusi aktual, dan submit akhir mengikuti kelompok |
 
 ## 6. Batasan dan tanggung jawab
 
 Model memakai satu lokasi/dataset historis, satu split temporal, satu seed pelatihan akhir. Hasil untuk sensor/lokasi/tahun lain tidak dijamin; perlu kalibrasi dan validasi. Fuzzy bukan sistem penilaian paparan atau rekomendasi keselamatan. Catat kontribusi anggota berdasarkan pekerjaan yang benar-benar dilakukan, jangan mengarang bukti.
 
-Versi online milik vandrialmas masih memakai kode sebelumnya ketika ditinjau. Akun terhubung hanya memiliki akses baca. Oleh karena itu, uji di atas adalah versi revisi lokal, bukan klaim bahwa URL Streamlit telah diperbarui.
+[Dashboard Streamlit Kelompok 9](https://tubes-kecebut-kel9.streamlit.app/)

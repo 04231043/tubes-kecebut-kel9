@@ -58,7 +58,7 @@ def forecast(source, directory=DEFAULT, model="hybrid"):
         raise ValueError("Model tidak tersedia.")
     spec = result["models"][model]
     cols, length = spec["features"], spec["params"]["length"]
-    frame = read_data(source, cols)
+    frame = read_data(source, cols, required_only=True)
     if len(frame) < length:
         raise ValueError(f"Sediakan setidaknya {length} jam observasi.")
     inputs = make_windows(standardize(frame, cols, result["preprocessing"]), length)
