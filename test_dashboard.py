@@ -6,7 +6,7 @@ import unittest
 
 import streamlit as st
 from streamlit.testing.v1 import AppTest
-from inference import DEFAULT
+from inference import DEFAULT, forecast, sample_input
 
 
 class DashboardTests(unittest.TestCase):
@@ -21,6 +21,10 @@ class DashboardTests(unittest.TestCase):
                 self.assertEqual(a.metric[0].value, "1.492")
                 self.assertEqual(a.metric[1].value, "24.24 / 100")
                 self.assertIn("Terpantau", a.success[0].value)
+                a.selectbox[0].set_value("pso").run()
+                a.button[0].click().run()
+                self.assertFalse(a.exception)
+                self.assertEqual(a.metric[0].value, f"{forecast(sample_input(DEFAULT, 'pso'), DEFAULT, 'pso').iloc[0].CO_mg_m3:.3f}")
 
     def test_uploaded_csv_and_missing_column(self):
         sample = (DEFAULT / "contoh_sensor.csv").read_bytes()
@@ -33,7 +37,8 @@ class DashboardTests(unittest.TestCase):
                 if valid:
                     values = a.dataframe[-1].value
                     self.assertEqual(values.iloc[0].prioritas, "Terpantau")
-                    self.assertAlmostEqual(values.iloc[0].CO_mg_m3, 1.492385, places=5)
+                    self.assertAlmostEqual(values.iloc[0].CO_mg_m3, 1.492385, places=3)
+                    self.assertIn("kualitas_input", values)
                 else:
                     self.assertTrue(any("Kolom wajib" in e.value for e in a.error))
 

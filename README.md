@@ -1,36 +1,41 @@
-# Prakiraan CO satu jam ke depan
+# Air Quality Lab — Forecasting Kualitas Udara
 
-Proyek Kecerdasan Buatan TE2514031, Teknik Elektro ITK, kelas B, kelompok 9. Aplikasi memprakirakan konsentrasi karbon monoksida pada jam berikutnya dari riwayat respons sensor dan cuaca. Keluaran fuzzy menunjukkan prioritas verifikasi sensor pada skala internal proyek.
+**TE2514031 Kecerdasan Buatan · Teknik Elektro ITK · Kelas B · Gasal 2026/2027**
 
-## Jalankan dashboard
+Prakiraan konsentrasi karbon monoksida (CO) pada jam berikutnya (*t+1*) dari riwayat sensor kimia dan cuaca. Sistem GA–PSO–RNN–Fuzzy menggunakan data historis [UCI Air Quality](https://doi.org/10.24432/C59K5F). Tidak menggunakan feed sensor live atau nilai acak sebagai hasil evaluasi.
 
-Gunakan Python 3.11 atau 3.12. Jalankan perintah berikut dari folder yang berisi app.py. Setelah dependensi terpasang, dashboard dan contoh prediksi dapat digunakan luring.
+## 1. Jalankan aplikasi
+
+Lingkungan pengujian: Python 3.12, Streamlit 1.51.0, Altair 5.5.0, NumPy 2.3.5, Pandas 2.2.3 dan Matplotlib 3.10.8. Paket deployment menggunakan nama dependensi tanpa pin agar resolver Streamlit Cloud dapat memilih versi yang kompatibel. Buka terminal pada folder yang berisi app.py.
 
 ```sh
 python -m venv .venv
-# Linux atau macOS
-source .venv/bin/activate
-# Di Windows PowerShell, gunakan .venv\Scripts\Activate.ps1
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+# Linux/macOS: source .venv/bin/activate
 python -m pip install -r requirements.txt
 python -m streamlit run app.py
 ```
 
-Pilih **Prediksi dan simulasi** lalu **Hitung prakiraan** untuk menggunakan enam baris contoh. Berkas yang sama ada di `artifacts/uci-v1/contoh_sensor.csv`. Untuk 5 Februari 2005 pukul 03.00, hasil contoh adalah 1,492 mg/m³, skor 24,24 dan prioritas Terpantau. CSV yang lebih panjang menghasilkan satu prediksi per jendela. Tanggal harus teratur setiap jam. Masukan −200 dan sel kosong menandai pembacaan hilang. Jika suatu kanal tidak memiliki pembacaan dalam empat jam terakhir, baris keluaran ditandai “Data kurang”.
+Dashboard membawa empat checkpoint. Setelah dependensi terpasang, prediksi bekerja luring tanpa mengunduh dataset atau melatih ulang.
 
-## Eksperimen
+Dashboard menggunakan layout responsif, sidebar berkelompok, kartu KPI, grafik Altair interaktif dengan tooltip, dan grafik analisis Matplotlib. Menu mencakup delapan area sesuai rubrik: Ringkasan, Eksplorasi data, Seleksi fitur GA, Optimasi PSO, Jaringan saraf, Aturan fuzzy, Prediksi dan simulasi, dan Perbandingan model.
 
-Sumbernya [Air Quality, UCI, DOI 10.24432/C59K5F](https://doi.org/10.24432/C59K5F). Arsip asli diambil sekali saat pelatihan. Kode memeriksa SHA-256 CSV, membaca pemisah titik koma dan koma desimal, serta mengabaikan baris dan kolom kosong. Eksplorasi harian yang ditampilkan aplikasi dan seluruh prediksi uji disimpan bersama checkpoint.
+## 2. Demo prediksi
 
-```sh
-python train.py --out runs/eksperimen-1
-python -m unittest -v test_pipeline test_dashboard
-```
+1. Pilih **Prediksi dan simulasi** dan model **GA + PSO + RNN**.
+2. Klik **Hitung prakiraan** pada contoh historis. Untuk target 5 Februari 2005 pukul 03.00, prakiraan 1,492 mg/m³, skor 24,24/100, prioritas Terpantau, dan CO aktual 1,6 mg/m³.
+3. Ubah riwayat sensor atau pilih model lain. Jumlah jam dan kolom wajib mengikuti konfigurasi terpilih.
+4. Di tab Unggah CSV, unduh contoh, tambahkan jam berurutan dan unggah kembali. CSV dapat memuat semua delapan fitur, meskipun model GA hanya membutuhkan subsetnya.
+5. Dashboard menunjukkan jumlah imputasi, atau menolak jendela jika suatu kanal wajib sama sekali tidak teramati pada empat jam terakhir. Input di luar rentang pengamatan latih ditandai. Timestamp adalah jam penuh lokal tanpa zona waktu.
+6. Ekspor CSV berisi prakiraan, kualitas input, keputusan fuzzy dan rentang referensi galat.
 
-Pilih folder keluaran baru setiap kali mengulang pelatihan. Jika CSV resmi sudah tersedia, gunakan `python train.py --csv AirQualityUCI.csv --out runs/eksperimen-2`. Di dashboard, tab **Pelatihan ulang** juga mendukung CSV latih dengan delapan kandidat fitur dan CO(GT). Notebook mandiri `Forecasting_CO_Kelompok_9.ipynb` dapat dijalankan sel demi sel di Colab. Ia menyertakan kode eksperimen dan mengambil sendiri data UCI. Ketika melatih kembali, waktu komputasi dapat berbeda menurut perangkat dan jumlah thread BLAS.
+Nilai referensi bawah/atas adalah prakiraan ± persentil ke-90 galat absolut validasi (batas bawah tidak negatif). Rentang tersebut **bukan interval kepercayaan terkalibrasi**. Fuzzy menetapkan prioritas pemeriksaan sensor pada skala internal, **bukan AQI/ISPU atau penilaian kesehatan**.
 
-Tabel memakai 1.302 target uji yang sama. MAE dan RMSE menggunakan mg/m³.
+## 3. Data, metode dan hasil terukur
 
-| Konfigurasi | Fitur | MAE | RMSE | R² |
+Kode memeriksa SHA-256 CSV UCI, membaca pemisah titik koma dan koma desimal, mengabaikan baris kosong, dan menganggap −200 sebagai data hilang. Split kronologis 70/15/15 berdasarkan jam target; median dan standardisasi dipelajari dari latih. Riwayat sensor berakhir satu jam sebelum target. Agar waktu target sama, evaluasi mensyaratkan sedikitnya delapan jam riwayat, setidaknya satu pembacaan setiap kandidat kanal dalam empat jam terakhir, serta label CO valid.
+
+| Konfigurasi | Fitur | MAE (mg/m³) | RMSE (mg/m³) | R² |
 |---|---:|---:|---:|---:|
 | RNN dasar | 8 | 0,4721 | 0,6404 | 0,7419 |
 | GA + RNN | 4 | 0,4569 | 0,6518 | 0,7326 |
@@ -38,31 +43,49 @@ Tabel memakai 1.302 target uji yang sama. MAE dan RMSE menggunakan mg/m³.
 | GA + PSO + RNN | 4 | 0,4462 | 0,6363 | 0,7452 |
 | Persistensi (CO terakhir) | 1 nilai CO | 0,5060 | 0,7764 | 0,6206 |
 
-Split kronologis 70/15/15 berdasarkan jam target. Median dan standardisasi dipelajari pada bagian latih. Label CO hilang dikeluarkan. Fitur berakhir satu jam sebelum target. Untuk menyamakan waktu target pada semua konfigurasi, evaluasi mensyaratkan delapan jam riwayat dan sedikitnya satu pembacaan setiap kanal selama empat jam sebelum label. Seed GA/PSO 7, 19, 42. RNN pencarian memakai 1.024 jendela latih, lima epoch dan inisialisasi 271. RNN akhir memakai seluruh 4.957 jendela latih dengan inisialisasi 42. Empat model dibekukan memakai validasi sebelum evaluasi uji.
+Keempat RNN dilatih terpisah dan diuji pada 1.302 waktu target identik. Model hibrida unggul pada MAE dengan empat sensor, sedangkan PSO+RNN unggul pada RMSE dan R². Fuzzy bukan model regresi tambahan. Semua angka dihitung dari prediksi checkpoint, bukan faktor pengali satu model.
 
-## Isi proyek
+GA/PSO menggunakan seed 7, 19, dan 42. GA memakai 6 individu × 5 generasi/seed; PSO memakai 5 partikel × 5 iterasi/seed pada dua ruang fitur. RNN pencarian memakai 1.024 jendela latih, 5 epoch dan seed 271. Pelatihan akhir memakai 4.957 jendela latih, seed 42, maksimum 32 epoch, patience 7. Set validasi (1.107 target) memilih hyperparameter dan checkpoint; set uji hanya untuk evaluasi akhir. Bukti disimpan dalam bundle.
+
+## 4. Reproduksi eksperimen & pengujian
+
+```sh
+python train.py --out runs/eksperimen-1
+python -m unittest -v test_pipeline test_dashboard
+```
+
+Pilih folder keluaran baru setiap mengulang pelatihan. Jika CSV resmi sudah tersedia, gunakan `python train.py --csv AirQualityUCI.csv --out runs/eksperimen-2`. Untuk Colab gunakan notebook mandiri `Forecasting_CO_Kelompok_9.ipynb`. Waktu komputasi bergantung pada perangkat/thread. Dashboard bisa memakai hasil eksperimen sesi melalui Pelatihan ulang. Untuk deployment tetap, jalankan offline dan tempatkan bundle terverifikasi pada `artifacts/uci-v1/`. Jangan pindahkan hanya bobot tanpa preprocessing, log dan prediksi.
+
+## 5. Isi repositori
 
 | Berkas | Fungsi |
 |---|---|
-| app.py | Delapan halaman Streamlit dan pelatihan ulang opsional per sesi |
-| air_data.py | Pembacaan CSV UCI, data hilang, pembagian temporal dan standardisasi |
-| optimize.py | GA turnamen, crossover, mutasi, elitisme, dan PSO dengan pbest/gbest |
-| recurrent.py | RNN Elman, Adam, backpropagation through time dan checkpoint validasi |
-| train.py | Empat eksperimen dan pembanding persistensi |
-| inference.py, fuzzy_system.py | Inferensi bersama untuk input manual maupun CSV dan fuzzy Mamdani |
-| artifacts/uci-v1/ | Empat bobot NPZ, preprocessing, riwayat semua kandidat, kurva, statistik dan prediksi |
-| test_pipeline.py, test_dashboard.py | Verifikasi split, checkpoint dan metrik, fuzzy, navigasi, serta masukan manual/CSV |
+| app.py | Delapan halaman Streamlit, prediksi manual/CSV semua model, training opsional |
+| air_data.py | Pembacaan CSV, timestamp, data hilang, split dan standardisasi |
+| optimize.py | GA: selection, crossover, mutation, elitism; PSO: pbest, gbest, velocity |
+| recurrent.py | RNN Elman, Adam, BPTT, dropout dan checkpoint validasi |
+| train.py | Empat eksperimen, persistensi, statistik, manifest |
+| inference.py, fuzzy_system.py | Inferensi model terpilih, kualitas input dan Mamdani |
+| evaluation.py | Tabel perbandingan dan analisis residual per rentang |
+| artifacts/uci-v1/ | Model NPZ, parameter, statistik, validasi/uji, contoh, manifest SHA-256 |
+| Forecasting_CO_Kelompok_9.ipynb | Notebook eksperimen mandiri |
+| test_pipeline.py, test_dashboard.py | Pengujian checkpoint, metrik, split, kualitas input, fuzzy dan UI |
+| docs/VALIDASI_DAN_DEMO_UAS.md | Checklist rubrik, protokol demo dan batasan |
 
-Aplikasi memuat hanya bundle di `artifacts/uci-v1/` saat mulai. Nama `models/` pada riwayat repositori merujuk ke eksperimen terdahulu. Seluruh perhitungan regresi memakai RNN yang sama dalam pelatihan dan inferensi.
+Empat checkpoint menggunakan NPZ tanpa pickle.
 
-## Integrasi ke repositori kelompok
+## 6. Aplikasi online dan source code
 
-Versi dasar yang digunakan adalah commit `68e2af89c6972a87e8c697ac080cd55ea0cc33f4` pada [repositori kelompok](https://github.com/vandrialmas/air-quality-streamlit-kelompok9). Arsip penyerahan dapat langsung diekstrak dan dijalankan. Untuk memasukkan perubahan ke checkout Git dari commit dasar, terapkan patch yang disertakan dari akar checkout yang bersih.
+- [Dashboard Streamlit](https://tubes-kecebut-kel9.streamlit.app/)
+- [Repository Kelompok 9](https://github.com/04231043/tubes-kecebut-kel9)
 
-```sh
-git switch -c perbaikan/eksperimen-co
-git apply --check /path/ke/perubahan-git.patch
-git apply /path/ke/perubahan-git.patch
-```
+Entry point: app.py. Seluruh checkpoint, preprocessing, ringkasan EDA, log, prediksi validasi/uji dan manifest harus tetap bersama di artifacts/uci-v1. Inference berjalan tanpa mengunduh dataset atau melatih model ulang.
+Versi layout ini memakai kembali checkpoint dan nilai metrik dari eksperimen sebelumnya (tidak mengubah bobot, prediksi uji, split, algoritma GA/PSO, atau aturan fuzzy). Tambahan artefak validasi digunakan untuk visualisasi dan pemeriksaan galat.
 
-Pada Streamlit Community Cloud, pilih cabang yang sudah memuat perbaikan, Python 3.12 dan entry point `app.py`. Versi ini diuji pada server lokal menggunakan model tersimpan.
+Arsitektur UI:
+- dashboard_ui.py: komponen visual (hero, sidebar, kartu, notifikasi, gaya chart).
+- assets/dashboard.css: style responsif dan tata letak.
+- .streamlit/config.toml: tema terang dengan sidebar gelap.
+- app.py: halaman, navigasi, grafik, dan integrasi inference.
+
+Jalankan test_pipeline dan test_dashboard sebelum perubahan kode. Riwayat Git menyimpan versi terdahulu.

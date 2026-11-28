@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "files": {
+    "baseline.npz": "5afea445979f3d4c4ed926b4fa04508e852e7d743c5b51b90cd9d92340f047ed",
+    "contoh_sensor.csv": "928e616dc3c198cf0da8dcedda44d001e676a7f6d8848ce224b12a52a17a7754",
+    "contoh_sensor_lengkap.csv": "5c9d3c8f04b9b1deb95f6e8a287ab86a22aa9f0994bdbd1eea3d09931c21127c",
+    "correlation.csv": "17a18c1119932b7c1aa802d6e7b72c2360e140dc76a047d62de678b778a8819f",
+    "daily.csv": "670c7538249f2008fc1dbbd8c072334d36372edb65b4760cb7d59f573b4435ed",
+    "experiment.json": "2adc8c69e5a4bee4b8e5f665d89e2fd392022670e7781ed99ba5cba7f3da45d3",
+    "ga.npz": "c8638581242a30445fcfe58b58ac099b8b7c63065de857d56ebd65ddc78cdb43",
+    "hybrid.npz": "751abb017dca4b7483f470296c7ee6d3c49db654e8dbeba6169c796ed862dc9e",
+    "pso.npz": "656ee162127e31d31bc95097595e9dd8512240775388f226fb5883c88450724e",
+    "test_predictions.csv": "af564b51f84ae4e06c5c6b102a97f3cdfdb3b2f7c5e2fd0d1afbf9fa12becce0",
+    "validation_predictions.csv": "6ab477079d08c0bad749c53cf29bcb0686cfd8574f966b01231daf96a96663c8"
+  }
+}

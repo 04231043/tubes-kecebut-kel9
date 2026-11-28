@@ -57,7 +57,13 @@ def read_data(file, required, require_contiguous=True):
         key = next((k for k in ["timestamp", "Date_Time"] if k in data), None)
         if key is None:
             raise ValueError("Sertakan timestamp ISO, atau pasangan Date dan Time seperti pada CSV UCI.")
+        # The source uses local hourly, timezone-naive timestamps. Demand a
+        # consistent convention instead of silently shifting time zones.
         times = pd.to_datetime(data.pop(key), format="ISO8601", errors="coerce")
+    if not isinstance(times.dtype, pd.DatetimeTZDtype) and not pd.api.types.is_datetime64_any_dtype(times.dtype):
+        raise ValueError("Gunakan waktu ISO dengan format/zona waktu yang konsisten.")
+    if isinstance(times.dtype, pd.DatetimeTZDtype):
+        raise ValueError("Gunakan timestamp lokal tanpa offset zona waktu, seperti data UCI.")
     if times.isna().any() or times.duplicated().any():
         raise ValueError("Ada waktu kosong, tidak valid, atau duplikat.")
     if not times.dt.floor("h").equals(times):
@@ -66,6 +72,8 @@ def read_data(file, required, require_contiguous=True):
     if absent:
         raise ValueError("Kolom wajib belum ada: " + ", ".join(absent))
     values = data.apply(numbers)
+    if TARGET in required and (values[TARGET].dropna() < 0).any():
+        raise ValueError("Konsentrasi CO tidak boleh negatif, kecuali kode -200 untuk data hilang.")
     values.index = pd.DatetimeIndex(times, name="timestamp")
     values = values.sort_index()
     if require_contiguous and not values.index.to_series().diff().dropna().eq(pd.Timedelta(hours=1)).all():
@@ -90,7 +98,12 @@ def standardize(frame, columns, prep):
     ids = [prep["features"].index(c) for c in columns]
     raw = frame[columns].to_numpy(dtype=float)
     filled = np.where(np.isnan(raw), np.asarray(prep["median"])[ids], raw)
-    return ((filled - np.asarray(prep["mean"])[ids]) / np.asarray(prep["std"])[ids]).astype("float32")
+    with np.errstate(over="ignore", invalid="ignore"):
+        normalized = ((filled - np.asarray(prep["mean"])[ids]) /
+                      np.asarray(prep["std"])[ids]).astype("float32")
+    if not np.isfinite(normalized).all():
+        raise ValueError("Nilai sensor terlalu besar atau tidak valid setelah standardisasi.")
+    return normalized
 
 
 def make_windows(arr, length):
