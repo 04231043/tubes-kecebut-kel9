@@ -1,4 +1,4 @@
-# Air Quality Lab — Forecasting Kualitas Udara
+# Air Quality Lab — Kelompok 9
 
 **TE2514031 Kecerdasan Buatan · Teknik Elektro ITK · Kelas B · Gasal 2026/2027**
 
@@ -6,7 +6,7 @@ Prakiraan konsentrasi karbon monoksida (CO) pada jam berikutnya (*t+1*) dari riw
 
 ## 1. Jalankan aplikasi
 
-Lingkungan pengujian: Python 3.12, Streamlit 1.51.0, Altair 5.5.0, NumPy 2.3.5, Pandas 2.2.3 dan Matplotlib 3.10.8. Paket deployment menggunakan nama dependensi tanpa pin agar resolver Streamlit Cloud dapat memilih versi yang kompatibel. Buka terminal pada folder yang berisi app.py.
+Gunakan Python 3.11 atau 3.12. Buka terminal pada folder yang berisi app.py.
 
 ```sh
 python -m venv .venv
@@ -18,7 +18,7 @@ python -m streamlit run app.py
 
 Dashboard membawa empat checkpoint. Setelah dependensi terpasang, prediksi bekerja luring tanpa mengunduh dataset atau melatih ulang.
 
-Dashboard menggunakan layout responsif, sidebar berkelompok, kartu KPI, grafik Altair interaktif dengan tooltip, dan grafik analisis Matplotlib. Menu mencakup delapan area sesuai rubrik: Ringkasan, Eksplorasi data, Seleksi fitur GA, Optimasi PSO, Jaringan saraf, Aturan fuzzy, Prediksi dan simulasi, dan Perbandingan model.
+Menu mencakup delapan area sesuai rubrik: Ringkasan, Eksplorasi data, Seleksi fitur GA, Optimasi PSO, Jaringan saraf, Aturan fuzzy, Prediksi dan simulasi, dan Perbandingan model.
 
 ## 2. Demo prediksi
 
@@ -72,20 +72,12 @@ Pilih folder keluaran baru setiap mengulang pelatihan. Jika CSV resmi sudah ters
 | test_pipeline.py, test_dashboard.py | Pengujian checkpoint, metrik, split, kualitas input, fuzzy dan UI |
 | docs/VALIDASI_DAN_DEMO_UAS.md | Checklist rubrik, protokol demo dan batasan |
 
-Empat checkpoint menggunakan NPZ tanpa pickle.
+Nama `models/` dari repositori sebelumnya merujuk pada artefak lama. File tersebut tidak dibaca oleh dashboard versi ini. Empat checkpoint baru menggunakan NPZ tanpa pickle.
 
-## 6. Aplikasi online dan source code
+## 6. Deploy ke repository kelompok
 
-- [Dashboard Streamlit](https://tubes-kecebut-kel9.streamlit.app/)
-- [Repository Kelompok 9](https://github.com/04231043/tubes-kecebut-kel9)
+Versi dasar: commit `68e2af89c6972a87e8c697ac080cd55ea0cc33f4` pada [repo kelompok](https://github.com/vandrialmas/air-quality-streamlit-kelompok9).
 
-Entry point: app.py. Seluruh checkpoint, preprocessing, ringkasan EDA, log, prediksi validasi/uji dan manifest harus tetap bersama di artifacts/uci-v1. Inference berjalan tanpa mengunduh dataset atau melatih model ulang.
-Versi layout ini memakai kembali checkpoint dan nilai metrik dari eksperimen sebelumnya (tidak mengubah bobot, prediksi uji, split, algoritma GA/PSO, atau aturan fuzzy). Tambahan artefak validasi digunakan untuk visualisasi dan pemeriksaan galat.
+Commit seluruh perubahan, termasuk folder `artifacts/uci-v1` dan `.streamlit`, ke cabang uji terlebih dahulu. Jalankan tes sebelum merge ke main. Streamlit Community Cloud memakai entry point app.py, Python 3.11/3.12 dan requirements.txt di root. Setelah commit masuk ke cabang yang digunakan app asli, periksa judul **Air Quality Lab · Kelompok 9**, lalu uji prediksi manual dan unggah CSV. Pertahankan deployment lama sampai versi baru lolos uji.
 
-Arsitektur UI:
-- dashboard_ui.py: komponen visual (hero, sidebar, kartu, notifikasi, gaya chart).
-- assets/dashboard.css: style responsif dan tata letak.
-- .streamlit/config.toml: tema terang dengan sidebar gelap.
-- app.py: halaman, navigasi, grafik, dan integrasi inference.
-
-Jalankan test_pipeline dan test_dashboard sebelum perubahan kode. Riwayat Git menyimpan versi terdahulu.
+Versi baru telah diuji pada server lokal. Deployment asli memerlukan hak tulis pada repo kelompok; paket lokal tidak otomatis mengubah URL Streamlit online.

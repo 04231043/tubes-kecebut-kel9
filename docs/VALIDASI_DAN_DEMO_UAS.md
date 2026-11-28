@@ -76,11 +76,11 @@ Semua model di bawah memprakirakan 5 Februari 2005 pukul 03.00. CO aktual 1,6 mg
 | 12 | EDA, kamus fitur, statistik missing, pembagian train/val/test, baseline | Selesai lokal |
 | 13 | GA, fitness, 3 seed, log konvergensi, fitur dan baseline vs GA | Selesai lokal |
 | 14 | PSO, training RNN, parameter, empat model, checkpoint dan kurva | Selesai lokal |
-| 15 | FIS, inferensi end-to-end, 8 halaman, manual/CSV, requirements, QA | Selesai lokal; uji akses publik dilakukan pada deployment milik kelompok |
+| 15 | FIS, inferensi end-to-end, 8 halaman, manual/CSV, requirements, QA | Selesai lokal; deployment revisi menunggu akses tulis GitHub |
 | 16 | Panduan demo, source, config, seed, logs, pengujian | Siap demo lokal; presentasi/video, kontribusi aktual, dan submit akhir mengikuti kelompok |
 
 ## 6. Batasan dan tanggung jawab
 
 Model memakai satu lokasi/dataset historis, satu split temporal, satu seed pelatihan akhir. Hasil untuk sensor/lokasi/tahun lain tidak dijamin; perlu kalibrasi dan validasi. Fuzzy bukan sistem penilaian paparan atau rekomendasi keselamatan. Catat kontribusi anggota berdasarkan pekerjaan yang benar-benar dilakukan, jangan mengarang bukti.
 
-Repo target: https://github.com/04231043/tubes-kecebut-kel9. Deployment: https://tubes-kecebut-kel9.streamlit.app/. Validasi teknis di atas adalah hasil pengujian lokal; status online wajib dikonfirmasi pada URL deployment setelah pembaruan.
+Versi online milik vandrialmas masih memakai kode sebelumnya ketika ditinjau. Akun terhubung hanya memiliki akses baca. Oleh karena itu, uji di atas adalah versi revisi lokal, bukan klaim bahwa URL Streamlit telah diperbarui.

@@ -4,7 +4,6 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import altair as alt
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
@@ -16,19 +15,32 @@ from evaluation import MODEL_LABELS as MODELS, comparison, error_groups
 from fuzzy_system import ACTIONS, GRID, IN_CENTERS, LEVELS, OUT_CENTERS, fuzzy_detail, memberships
 from inference import DEFAULT, forecast, load_run, sample_input, verify_bundle
 from train import run
-from dashboard_ui import (COLORS, GRID_COLOR, INK, PAPER, init_style, sidebar_brand, sidebar_status,
-                          hero, page_header, note, method_grid, flow_grid, show_altair, footer)
 
-st.set_page_config(page_title="Air Quality Lab | Kelompok 9", page_icon="🌿", layout="wide",
-                   initial_sidebar_state="auto")
+st.set_page_config(page_title="Air Quality Lab · Kelompok 9", page_icon="🌿", layout="wide")
 PAGES = ["Ringkasan", "Eksplorasi data", "Seleksi fitur GA", "Optimasi PSO", "Jaringan saraf",
          "Aturan fuzzy", "Prediksi dan simulasi", "Perbandingan model"]
 SUBTITLES = ["Overview", "Dataset Explorer", "GA Optimization", "PSO Optimization",
              "Neural Network", "Fuzzy Inference", "Prediction / Simulation", "Model Comparison"]
+COLORS = ["#087C75", "#4263AD", "#C56D34", "#8048A2", "#627488"]
+INK, GRID_COLOR, PAPER = "#172E40", "#DDE6EA", "#FFFFFF"
 MEMBERS = [("Ariyo Arianto", "04231013"), ("Jhosua George Kamagi", "04231043"),
            ("Vandri Afli Navi Almas", "04231089"), ("Bernadt Jansen Rajagukguk", "04221062")]
 
-init_style()
+st.markdown("""
+<style>
+[data-testid="stAppViewContainer"] .block-container {max-width: 1320px; padding-top: 4.25rem; padding-bottom: 2rem;}
+[data-testid="stSidebar"] {border-right: 1px solid #dbe7ea;}
+[data-testid="stSidebar"] h1 {letter-spacing: -.04em; font-size: 1.65rem;}
+[data-testid="stMetricValue"] {font-weight: 650; letter-spacing: -.04em;}
+[data-testid="stMetricLabel"] p {font-weight: 550;}
+[data-testid="stVerticalBlockBorderWrapper"] {background-color: #fff; border-radius: 12px;}
+.aq-eyebrow {color: #087c75; text-transform: uppercase; letter-spacing: .14em; font-weight: 750; font-size: .76rem; margin-bottom: .25rem;}
+.aq-hero {background: #102e3e; color: #effaff; padding: 26px 30px; border-radius: 16px; margin: 0 0 18px;}
+.aq-hero p {color: #b9d5df; font-size: 1.02rem; margin-bottom: .35rem;}
+.aq-hero h2 {color: #fff; margin: 0 0 .5rem; letter-spacing: -.035em; font-size: 2.05rem; line-height: 1.2;}
+.aq-tag {font-size: .74rem; font-weight: 650; letter-spacing: .08em; color: #6bdccb; text-transform: uppercase;}
+</style>
+""", unsafe_allow_html=True)
 
 directory = Path(st.session_state.get("active_run", DEFAULT))
 
@@ -67,45 +79,34 @@ def metric_row(items):
 
 
 def page_title(index, title, description=None):
-    page_header(index, SUBTITLES[index], title, description)
+    st.markdown(f'<div class="aq-eyebrow">0{index + 1} / {SUBTITLES[index]}</div>', unsafe_allow_html=True)
+    st.title(title)
+    if description:
+        st.caption(description)
 
 
 def plot_histories(logs, xlabel, ylabel):
-    series = pd.DataFrame([{"Tahap": step + 1, "Galat": value, "Seed": f"Seed {log['seed']}"}
-                           for log in logs for step, value in enumerate(log["history"])])
-    encoding = alt.Chart(series).encode(
-        x=alt.X("Tahap:O", title=xlabel, axis=alt.Axis(labelAngle=0)),
-        y=alt.Y("Galat:Q", title=ylabel, scale=alt.Scale(zero=False)),
-        color=alt.Color("Seed:N", scale=alt.Scale(domain=[f"Seed {log['seed']}" for log in logs],
-                                                  range=COLORS[:len(logs)]), title=None),
-        tooltip=[alt.Tooltip("Seed:N"), alt.Tooltip("Tahap:O", title=xlabel),
-                 alt.Tooltip("Galat:Q", title=ylabel, format=".5f")])
-    show_altair(encoding.mark_line(strokeWidth=2.4, point=True), 245)
+    fig, ax = chart(xlabel, ylabel)
+    for i, log in enumerate(logs):
+        h = log["history"]
+        ax.plot(range(1, len(h)+1), h, marker="o", markersize=4, linewidth=1.8,
+                color=COLORS[i % len(COLORS)], label=f"Seed {log['seed']}")
+    ax.legend(frameon=False, ncol=min(3, len(logs)), fontsize=9)
+    draw(fig)
 
 
 def actual_plot(predictions, column, hours, offset=0):
-    series = predictions.set_index("timestamp_target").sort_index()
-    start = series.index[0] + pd.Timedelta(hours=offset)
-    stop = start + pd.Timedelta(hours=hours-1)
-    subset = series.loc[start:stop, ["aktual", column]].asfreq("h").reset_index()
-    if subset.empty:
-        st.info("Tidak ada target valid pada rentang ini. Pilih awal periode lain.")
-        return
-    names = {"aktual": "Aktual", column: MODELS[column]}
-    frame = subset.melt("timestamp_target", var_name="Seri", value_name="CO")
-    # Keep discontinuities in each series when target observations were excluded.
-    frame["Segmen"] = frame.groupby("Seri")["CO"].transform(lambda c: c.isna().cumsum()).astype(str)
-    frame["Seri"] = frame["Seri"].map(names)
-    frame = frame.dropna(subset=["CO"])
-    base = alt.Chart(frame).encode(
-        x=alt.X("timestamp_target:T", title="Waktu target", axis=alt.Axis(format="%d %b %H:%M", tickCount=6, labelAngle=-20)),
-        y=alt.Y("CO:Q", title="Konsentrasi CO (mg/m³)", scale=alt.Scale(zero=True)),
-        color=alt.Color("Seri:N", title=None, legend=alt.Legend(symbolType="stroke", symbolOpacity=1), scale=alt.Scale(
-            domain=["Aktual", MODELS[column]], range=["#8398AB", COLORS[0]])),
-        detail="Segmen:N",
-        tooltip=[alt.Tooltip("timestamp_target:T", title="Jam target", format="%d %b %Y, %H:%M"),
-                 alt.Tooltip("Seri:N"), alt.Tooltip("CO:Q", title="CO (mg/m³)", format=".3f")])
-    show_altair(base.mark_line(strokeWidth=2.2) + base.mark_circle(size=52, opacity=.09), 262)
+    subset = predictions.set_index("timestamp_target").sort_index()
+    first = subset.index[0] + pd.Timedelta(hours=offset)
+    subset = subset.loc[first:first + pd.Timedelta(hours=hours-1)].asfreq("h")
+    fig, ax = chart("Waktu target", "CO (mg/m³)")
+    ax.plot(subset.index, subset.aktual, color="#68808D", label="Aktual", linewidth=1.45)
+    ax.plot(subset.index, subset[column], color=COLORS[0], label=MODELS[column], linewidth=1.8)
+    ax.legend(frameon=False, ncol=2, fontsize=9)
+    locator = mdates.AutoDateLocator(minticks=3, maxticks=7)
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
+    draw(fig)
 
 
 def measure(value, places=3):
@@ -143,18 +144,15 @@ if "R² uji" in model_table and model_table["R² uji"].notna().any():
 else:
     best_r2 = None
 
-sidebar_brand()
-page = st.sidebar.radio("Navigasi", PAGES, label_visibility="collapsed", key="nav")
+st.sidebar.title("Air Quality Lab")
+st.sidebar.caption("TE2514031 · Teknik Elektro ITK")
+st.sidebar.markdown("**KELOMPOK 09 / KELAS B**")
+page = st.sidebar.radio("Navigasi", PAGES, label_visibility="collapsed")
 st.sidebar.divider()
-sidebar_status(info["source_kind"], stats["rows"])
-st.sidebar.link_button("Dataset UCI · Sumber", "https://doi.org/10.24432/C59K5F", width="stretch")
-st.sidebar.link_button("Source code · GitHub", "https://github.com/04231043/tubes-kecebut-kel9", width="stretch")
-
-
-def navigate(target):
-    st.session_state["nav"] = target
-
-
+st.sidebar.markdown("**Eksperimen terverifikasi**")
+st.sidebar.caption(f"{info['source_kind']} · {stats['rows']:,} jam")
+st.sidebar.caption("Prakiraan CO +1 jam · mg/m³\nBukan feed sensor real-time.")
+st.sidebar.link_button("Sumber dataset UCI", "https://doi.org/10.24432/C59K5F", width="stretch")
 if directory != DEFAULT:
     st.sidebar.warning("Eksperimen sesi ini aktif.")
     if st.sidebar.button("Kembali ke eksperimen UCI"):
@@ -164,81 +162,47 @@ if directory != DEFAULT:
 
 
 if page == PAGES[0]:
-    hero()
-    cta, compare_btn = st.columns(2)
-    cta.button("Mulai simulasi prakiraan", type="primary", width="stretch",
-               on_click=navigate, args=(PAGES[6],))
-    compare_btn.button("Lihat perbandingan model", width="stretch",
-                       on_click=navigate, args=(PAGES[7],))
-    h = hybrid["test"]
-    metric_row([("Observasi per jam", f"{stats['rows']:,}", "Data pada periode historis."),
-                ("Kanal hibrida", f"{len(hybrid['features'])} dari {len(FEATURES)}", "Kanal hasil seleksi GA."),
-                ("MAE hibrida", f"{h['mae']:.3f} mg/m³", "Rata-rata galat absolut pada data uji."),
-                ("RMSE hibrida", f"{h['rmse']:.3f} mg/m³", "Akar rata-rata kuadrat galat.")])
-    left, right = st.columns([2.1, 1])
-    with left:
-        with st.container(border=True):
-            st.subheader("Konsentrasi CO · Aktual vs prakiraan")
-            hours = st.radio("Rentang observasi", [48, 96, 168], index=1,
-                             format_func=lambda n: f"{n} jam", horizontal=True, label_visibility="collapsed")
-            actual_plot(predictions, "hybrid", hours)
-            st.caption("Arahkan kursor ke grafik untuk melihat waktu dan nilai. Celah menandakan target yang tidak lolos filter.")
-    with right:
-        with st.container(border=True):
-            st.subheader("Ringkasan hasil uji")
-            st.caption(f"{len(predictions):,} waktu target yang sama")
-            st.markdown(f"**MAE terendah**  \n{best_mae['Model']} · {best_mae['MAE uji']:.4f}")
-            st.markdown(f"**RMSE terendah**  \n{best_rmse['Model']} · {best_rmse['RMSE uji']:.4f}")
-            if best_r2 is not None:
-                st.markdown(f"**R² tertinggi**  \n{best_r2['Model']} · {best_r2['R² uji']:.4f}")
-            note("Interpretasi", "Model terbaik bergantung pada metrik. Fuzzy hanya menetapkan prioritas pengecekan, bukan menaikkan akurasi RNN.")
-    st.subheader("Empat modul kecerdasan buatan")
-    method_grid([
-        ("01 · OPTIMASI", "Genetic Algorithm", "Kromosom biner memilih kanal sensor dengan fitness validasi.",
-         f"{len(hybrid['features'])} dari {len(FEATURES)} kanal terpilih"),
-        ("02 · OPTIMASI", "Particle Swarm", "Pencarian panjang jendela, unit, learning rate, dan dropout.",
-         f"{hybrid['params']['length']} jam · {hybrid['params']['units']} unit"),
-        ("03 · PREDIKSI", "Recurrent NN", "RNN Elman membaca urutan sensor untuk CO pada jam berikutnya.",
-         f"MAE {h['mae']:.4f} mg/m³"),
-        ("04 · KEPUTUSAN", "Fuzzy Mamdani", "Aturan min–max dan centroid menentukan prioritas pemeriksaan.",
-         "5 aturan · skor 0–100")
-    ])
-    st.subheader("Bagaimana sistem bekerja?")
+    st.markdown("""
+    <section class="aq-hero">
+      <div class="aq-tag">Tugas besar kecerdasan buatan · Gasal 2026/2027</div>
+      <h2>Prakiraan kualitas udara<br>berbasis AI hibrida</h2>
+      <p>Sensor → GA → PSO → RNN → Fuzzy · CO satu jam ke depan</p>
+      <p>Dataset historis dan checkpoint nyata, bukan angka simulasi acak.</p>
+    </section>
+    """, unsafe_allow_html=True)
+    metric_row([("Observasi per jam", f"{stats['rows']:,}"),
+                ("Fitur hibrida", f"{len(hybrid['features'])} / {len(FEATURES)}"),
+                ("MAE hibrida", f"{hybrid['test']['mae']:.3f} mg/m³"),
+                ("RMSE hibrida", f"{hybrid['test']['rmse']:.3f} mg/m³")])
+    st.subheader("Aktual vs prakiraan hibrida")
+    st.caption("96 jam pertama periode uji. Bagian kosong menunjukkan target yang tidak tersedia atau jendela tidak memenuhi syarat.")
     with st.container(border=True):
-        st.markdown("**Jalur pelatihan (offline)**")
-        flow_grid([("Langkah 01", "Data & preprocessing", "Split waktu 70/15/15; statistik transformasi hanya dari latih."),
-                   ("Langkah 02", "GA + PSO", "Subset sensor dan hyperparameter dipilih memakai validasi."),
-                   ("Langkah 03", "Empat checkpoint", "Bobot RNN dibekukan sebelum evaluasi pada data uji.")])
-        st.markdown("**Jalur pemakaian (inference)**")
-        flow_grid([("Input", "Riwayat sensor sampai t", "Sertakan kanal terpilih dan timestamp berurutan."),
-                   ("Forecast", "CO pada t+1", "Standardisasi dan RNN terlatih menghasilkan mg/m³."),
-                   ("Output", "Keputusan fuzzy", "Tindak lanjut verifikasi sensor pada skala internal proyek.")])
-    a, b = st.columns(2)
-    with a:
-        with st.container(border=True):
-            st.subheader("Data dan pembagian eksperimen")
-            split_rows = pd.DataFrame([{"Bagian": label, "Jam target valid": stats["splits"][key]["n"]}
-                                       for key, label in [("train", "Latih"), ("val", "Validasi"), ("test", "Uji")]])
-            split_chart = alt.Chart(split_rows).mark_bar(cornerRadiusEnd=5, size=22).encode(
-                y=alt.Y("Bagian:N", sort=["Latih", "Validasi", "Uji"], title=None),
-                x=alt.X("Jam target valid:Q", title="Jumlah target valid"),
-                color=alt.Color("Bagian:N", scale=alt.Scale(domain=["Latih", "Validasi", "Uji"],
-                                                             range=COLORS[:3]), legend=None),
-                tooltip=["Bagian:N", "Jam target valid:Q"])
-            show_altair(split_chart, 130)
-            st.caption("Pembagian 70/15/15 berdasarkan periode waktu sebelum filter target dan jendela.")
-    with b:
-        with st.container(border=True):
-            st.subheader("Tim proyek · Kelompok 9")
-            st.caption("Teknik Elektro · Institut Teknologi Kalimantan · Kelas B")
-            st.dataframe(pd.DataFrame(MEMBERS, columns=["Nama", "NIM"]), hide_index=True, width="stretch")
-    with st.expander("Bukti keterulangan & panduan demo"):
+        actual_plot(predictions, "hybrid", 96)
+    left, right = st.columns([1.55, 1])
+    with left:
+        st.subheader("Arsitektur")
+        st.graphviz_chart("""digraph { rankdir=TB; graph [bgcolor="transparent", nodesep=.15, ranksep=.23];
+            node [shape=box, style="rounded,filled", fillcolor="#e6f2f1", color="#90b6b8", fontname="Arial"];
+            edge [color="#78909b"];
+            "UCI: latih + validasi" -> "GA: subset sensor" -> "PSO: konfigurasi RNN" -> "Checkpoint RNN";
+            "Riwayat sensor sampai t" -> "RNN terlatih";
+            "Checkpoint RNN" -> "RNN terlatih" -> "CO(t+1) [mg/m³]" -> "Fuzzy: prioritas verifikasi"; }
+        """)
+    with right:
+        st.subheader("Hasil evaluasi")
+        st.markdown(f"**MAE terendah:** {best_mae['Model']}  \n{best_mae['MAE uji']:.4f} mg/m³")
+        st.markdown(f"**RMSE terendah:** {best_rmse['Model']}  \n{best_rmse['RMSE uji']:.4f} mg/m³")
+        st.caption(f"Empat model memakai {len(predictions):,} jam target uji yang sama. "
+                   "Fuzzy menentukan prioritas verifikasi, bukan meningkatkan akurasi prediksi.")
+        st.subheader("Tim proyek")
+        st.dataframe(pd.DataFrame(MEMBERS, columns=["Nama", "NIM"]), hide_index=True, width="stretch")
+    with st.expander("Bukti keterulangan dan panduan demo"):
         fit_notes()
         st.code(f"SHA-256 CSV: {info['source_sha256']}\nBundle: {bundle_hash}", language=None)
         st.download_button("Unduh log eksperimen JSON", (directory / "experiment.json").read_bytes(),
                            "experiment.json", "application/json")
-        st.write("Mulai dari EDA → GA → PSO → RNN → Fuzzy → Prediksi → Perbandingan. "
-                 "Model terlatih dapat digunakan tanpa pelatihan ulang.")
+        st.write("Mulai dari Eksplorasi data → GA → PSO → Jaringan saraf → Aturan fuzzy → "
+                 "Prediksi dan simulasi → Perbandingan model. Prediksi default bekerja tanpa melatih ulang.")
 
 
 elif page == PAGES[1]:
@@ -251,70 +215,56 @@ elif page == PAGES[1]:
                 ("CO hilang", f"{table.loc[TARGET, 'hilang (%)']:.1f}%"),
                 ("Kandidat masukan", len(FEATURES))])
     st.caption(f"Periode {stats['from']} — {stats['to']} (timestamp lokal sumber).")
-    note("Pahami kualitas data terlebih dahulu",
-         "Kode −200 bukan konsentrasi negatif, melainkan pembacaan hilang. Target CO yang kosong tidak dilatih; "
-         "kanal masukan diimputasi dengan median data latih.")
     left, right = st.columns([1.2, 1])
     with left:
-        with st.container(border=True):
-            st.subheader("Distribusi data hilang")
-            selected = table.reset_index().rename(columns={"variabel": "Kanal", "hilang (%)": "Persen hilang"})
-            missing_bars = alt.Chart(selected).mark_bar(cornerRadiusEnd=4, size=15).encode(
-                y=alt.Y("Kanal:N", title=None, sort="-x", axis=alt.Axis(labelLimit=140)),
-                x=alt.X("Persen hilang:Q", title="Nilai hilang (%)", scale=alt.Scale(domain=[0, 100])),
-                color=alt.condition(alt.datum.Kanal == TARGET, alt.value(COLORS[2]), alt.value(COLORS[0])),
-                tooltip=["Kanal:N", alt.Tooltip("missing:Q", title="Jumlah hilang"),
-                         alt.Tooltip("Persen hilang:Q", format=".2f"), alt.Tooltip("observed:Q", title="Teramati")])
-            show_altair(missing_bars, 300)
-            st.caption("Warna jingga menunjukkan label target CO; arahkan kursor ke grafik untuk melihat jumlah pembacaan.")
+        st.subheader("Distribusi data hilang")
+        selected = table.sort_values("hilang (%)", ascending=True)
+        fig, ax = chart("Nilai hilang (%)", "", height=4.2, width=6.4)
+        ax.barh(selected.index, selected["hilang (%)"], color=COLORS[0], height=.62)
+        ax.set_xlim(0, 105)
+        for i, v in enumerate(selected["hilang (%)"]):
+            ax.text(min(v+1, 95), i, f"{v:.1f}%", va="center", fontsize=7)
+        draw(fig)
     with right:
-        with st.container(border=True):
-            st.subheader("Korelasi observasi")
-            labels = {x: "CO" if x == TARGET else x.split("(")[0].replace("PT08.", "") for x in corr.columns}
-            frame = corr.rename(index=labels, columns=labels).rename_axis("Y").reset_index().melt("Y", var_name="X", value_name="r")
-            order = list(labels.values())
-            base = alt.Chart(frame).encode(x=alt.X("X:O", title=None, sort=order, axis=alt.Axis(labelAngle=0)),
-                y=alt.Y("Y:O", title=None, sort=order), tooltip=["X:O", "Y:O", alt.Tooltip("r:Q", title="Pearson r", format=".3f")])
-            cells = base.mark_rect(stroke="white", strokeWidth=1).encode(color=alt.Color(
-                "r:Q", title="Pearson r", scale=alt.Scale(domain=[-1, 0, 1], range=["#5074B8", "#F4F6F8", "#C56B45"]), legend=alt.Legend(orient="right")))
-            nums = base.mark_text(fontSize=10).encode(text=alt.Text("r:Q", format=".1f"), color=alt.value(INK))
-            show_altair(cells + nums, 290)
-            st.caption("Pearson pada pasangan nilai teramati; hanya untuk EDA, bukan untuk memilih fitur.")
+        st.subheader("Korelasi observasi")
+        fig, ax = plt.subplots(figsize=(6.1, 5.0), facecolor=PAPER)
+        mat = ax.imshow(corr, cmap="RdBu_r", vmin=-1, vmax=1)
+        labels = ["CO" if x == TARGET else x.split("(")[0].replace("PT08.", "") for x in corr.columns]
+        ax.set_xticks(range(len(labels)), labels, rotation=45, ha="right", fontsize=8)
+        ax.set_yticks(range(len(labels)), labels, fontsize=8)
+        for i in range(len(labels)):
+            for j in range(len(labels)):
+                v = corr.iloc[i, j]
+                ax.text(j, i, f"{v:.1f}" if pd.notna(v) else "—",
+                        ha="center", va="center", fontsize=7, color="white" if abs(v) > .65 else "#20333d")
+        fig.colorbar(mat, ax=ax, shrink=.8, pad=.03)
+        draw(fig)
+        st.caption("Pearson berdasarkan pasangan nilai yang tersedia; ditampilkan untuk EDA, bukan untuk memilih fitur atau tuning.")
     st.subheader("Statistik deskriptif")
     st.dataframe(table.rename(columns={"observed": "Teramati", "missing": "Hilang",
                                        "min": "Min", "median": "Median", "max": "Maks"}).round(2), width="stretch")
     variable = st.selectbox("Variabel untuk melihat tren", list(summary.index), index=list(summary.index).index(TARGET))
     c1, c2 = st.columns(2)
     with c1:
-        with st.container(border=True):
-            st.subheader("Tren harian")
-            series = daily[["timestamp", variable]].rename(columns={variable: "nilai"})
-            trend = alt.Chart(series).mark_line(color=COLORS[0], strokeWidth=2).encode(
-                x=alt.X("timestamp:T", title="Tanggal", axis=alt.Axis(format="%b %Y", tickCount=5)),
-                y=alt.Y("nilai:Q", title=f"Rata-rata {variable}", scale=alt.Scale(zero=False)),
-                tooltip=[alt.Tooltip("timestamp:T", title="Tanggal", format="%d %b %Y"),
-                         alt.Tooltip("nilai:Q", title=variable, format=".3f")])
-            show_altair(trend, 220)
+        fig, ax = chart("Tanggal", f"Rata-rata harian {variable}", width=7)
+        ax.plot(daily.timestamp, daily[variable], color=COLORS[0], linewidth=1.2)
+        fig.autofmt_xdate()
+        draw(fig)
     with c2:
-        with st.container(border=True):
-            st.subheader("Distribusi nilai")
-            fig, ax = chart(variable, "Jumlah observasi", width=7)
-            item = summary.loc[variable]
-            if item["hist"]:
-                ax.stairs(item["hist"], item["edges"], fill=True, color=COLORS[1], alpha=.85)
-            else:
-                ax.text(.5, .5, "Tidak ada nilai teramati", ha="center", transform=ax.transAxes)
-            draw(fig)
+        fig, ax = chart(variable, "Jumlah observasi", width=7)
+        item = summary.loc[variable]
+        if item["hist"]:
+            ax.stairs(item["hist"], item["edges"], fill=True, color=COLORS[1], alpha=.85)
+        else:
+            ax.text(.5, .5, "Tidak ada nilai teramati", ha="center", transform=ax.transAxes)
+        draw(fig)
     st.subheader("Split kronologis 70 / 15 / 15")
     split = pd.DataFrame(stats["splits"]).T
     st.bar_chart(split[["hours", "n"]].rename(columns={"hours": "Jam periode", "n": "Target valid"}), horizontal=True)
     st.dataframe(split.rename(columns={"from": "Awal", "to": "Akhir", "hours": "Jam periode",
                                        "observed_target": "CO teramati", "n": "Target valid"}), width="stretch")
-    flow_grid([("70%", "Latih", "Pelajari median, scaler, dan bobot RNN."),
-               ("15%", "Validasi", "Pilih fitur, hyperparameter dan checkpoint."),
-               ("15%", "Uji", "Evaluasi akhir tanpa penyesuaian model.")])
-    note("Tidak ada kebocoran target", "Jendela sensor berhenti pada t; CO diprakirakan pada t+1. "
-         "Semua konfigurasi menggunakan waktu target uji yang sama.", "good")
+    st.info("Jendela memakai sensor hingga t, prediksi CO pada t+1. Median dan standardisasi dipelajari dari latih; "
+            "target CO hilang tidak diimputasi. Perbandingan memakai target valid yang sama.")
     with st.expander("Kamus data dan sumber"):
         labels = [
             ("CO(GT)", "Target referensi", "mg/m³"),
@@ -350,22 +300,15 @@ elif page == PAGES[2]:
                 ("Seed terpilih", best["seed"]), ("Pencarian baru", sum(g["new_fits"] for g in logs))])
     st.latex(r"J(\mathbf{b})=\operatorname{RMSE}_{val}+\lambda \frac{\sum b_i}{8}")
     st.caption(f"Minimasi fitness · penalti λ={info['ga_penalty']:.2f} mg/m³ · kromosom terpilih {chromosome}")
-    flow_grid([("01 · Encoding", "8 bit kandidat", "Bit 1 mengaktifkan kanal; bit 0 mengeluarkannya."),
-               ("02 · Evolusi", "Fitness, seleksi, variasi", "Turnamen, crossover dan mutasi membentuk kandidat baru."),
-               ("03 · Hasil", "Kromosom terbaik", "Elitisme mempertahankan fitness terbaik antargenerasi.")])
     left, right = st.columns([1.45, 1])
     with left:
-        with st.container(border=True):
-            st.subheader("Konvergensi setiap seed")
-            plot_histories(logs, "Generasi", "Fitness (mg/m³)")
-            st.caption("Semakin kecil semakin baik; nilai terbaik dipertahankan melalui elitisme.")
+        st.subheader("Konvergensi setiap seed")
+        plot_histories(logs, "Generasi", "Fitness (mg/m³)")
     with right:
-        with st.container(border=True):
-            st.subheader("Kromosom terpilih")
-            st.code(chromosome, language=None)
-            st.dataframe(pd.DataFrame([{"Kanal": c, "Bit": int(c in selected),
-                                        "Status": "Dipakai" if c in selected else "Tidak dipakai"} for c in FEATURES]),
-                         hide_index=True, width="stretch")
+        st.subheader("Kromosom terpilih")
+        st.dataframe(pd.DataFrame([{"Kanal": c, "Bit": int(c in selected),
+                                    "Status": "Dipakai" if c in selected else "Tidak dipakai"} for c in FEATURES]),
+                     hide_index=True, width="stretch")
     st.dataframe(pd.DataFrame([{"Seed": g["seed"], "Fitness": g["fitness"], "Fitur": ", ".join(g["features"]),
                                "Evaluasi": len(g["candidates"]), "Pelatihan baru": g["new_fits"],
                                "Waktu (s)": g["seconds"]} for g in logs]).round(5), hide_index=True, width="stretch")
@@ -375,9 +318,6 @@ elif page == PAGES[2]:
     st.subheader("Efek seleksi fitur pada model dasar")
     st.dataframe(model_table.iloc[:2][["Model", "Fitur", "RMSE validasi", "MAE uji", "RMSE uji", "Latih akhir (s)"]].round(4),
                  hide_index=True, width="stretch")
-    reduction = 100 * (1 - len(selected) / len(FEATURES))
-    note("Interpretasi seleksi fitur", f"Dimensi masukan berkurang {reduction:.0f}%. Penalti fitness menyeimbangkan "
-         "jumlah kanal dengan galat validasi. RMSE data uji tetap dilaporkan terpisah; pengurangan fitur tidak menjamin semua metrik membaik.")
     fit_notes()
     with st.expander("Log setiap evaluasi kandidat"):
         df = pd.DataFrame([{"seed": g["seed"], **c} for g in logs for c in g["candidates"]])
@@ -398,32 +338,24 @@ elif page == PAGES[3]:
                 ("Learning rate", f"{params['lr']:.5f}")])
     st.latex(r"v_i^{t+1}=0.65v_i^t+1.4r_1(pbest_i-x_i^t)+1.4r_2(gbest-x_i^t)")
     st.latex(r"x_i^{t+1}=\operatorname{clip}(x_i^t+v_i^{t+1},0,1)")
-    flow_grid([("01 · Posisi", "Kandidat hyperparameter", "Posisi partikel didekode menjadi konfigurasi RNN."),
-               ("02 · Evaluasi", "RMSE validasi", "Setiap kandidat melatih RNN pilot dan mengevaluasi validasi."),
-               ("03 · Pembaruan", "pbest dan gbest", "Kecepatan diperbarui dari pengalaman pribadi dan kawanan.")])
     left, right = st.columns([1.5, 1])
     with left:
-        with st.container(border=True):
-            st.subheader("Konvergensi gbest")
-            plot_histories(logs, "Iterasi", "RMSE validasi terbaik (mg/m³)")
-            st.caption("Garis adalah RMSE terbaik kumulatif dari tiap kawanan, bukan kurva loss epoch RNN.")
+        st.subheader("Konvergensi gbest")
+        plot_histories(logs, "Iterasi", "RMSE validasi terbaik (mg/m³)")
     with right:
-        with st.container(border=True):
-            st.subheader("Ruang pencarian")
-            st.dataframe(pd.DataFrame([
-                ("Jendela", "4, 6, 8 jam", str(params["length"])),
-                ("Unit", "8, 12, 16, 20, 24", str(params["units"])),
-                ("Learning rate", "0,001 – 0,01 (log)", str(params["lr"])),
-                ("Dropout", "0 – 0,25", str(params["dropout"]))
-            ], columns=["Parameter", "Batas", "Terpilih"]), hide_index=True, width="stretch")
+        st.subheader("Ruang pencarian")
+        st.table(pd.DataFrame([
+            ("Jendela", "4, 6, 8 jam", str(params["length"])),
+            ("Unit", "8, 12, 16, 20, 24", str(params["units"])),
+            ("Learning rate", "0,001 – 0,01 (log)", str(params["lr"])),
+            ("Dropout", "0 – 0,25", str(params["dropout"]))
+        ], columns=["Parameter", "Batas", "Terpilih"]))
     st.dataframe(pd.DataFrame([{"Seed": g["seed"], **g["parameters"], "RMSE pencarian": g["fitness"],
                                "Evaluasi": len(g["candidates"]), "Waktu (s)": g["seconds"]} for g in logs]).round(5),
                  hide_index=True, width="stretch")
     st.caption(f"{info['search_budget']['pso_particles']} partikel × {info['search_budget']['pso_iterations']} iterasi/seed. "
                f"Rata-rata gbest akhir {mean}; simpangan baku sampel {sd}. "
                f"Model akhir {MODELS[key]} memiliki RMSE validasi {info['models'][key]['val']['rmse']:.4f} mg/m³.")
-    note("Pencarian versus pelatihan akhir", "PSO memakai anggaran pelatihan pilot. Konfigurasi terpilih kemudian dilatih "
-         "dengan seluruh jendela latih dan checkpoint validasi. Karena itu, galat pencarian tidak identik dengan galat akhir.")
     fit_notes()
     with st.expander("Riwayat posisi partikel dan uji kandidat"):
         df = pd.DataFrame([{"seed": g["seed"], "iterasi": c["iteration"], "partikel": c["particle"],
@@ -443,29 +375,16 @@ elif page == PAGES[4]:
     st.markdown(f"**Arsitektur:** {p['length']} jam × {len(model['features'])} kanal → "
                 f"{p['units']} unit tanh → 1 nilai CO. "
                 f"Parameter trainable: {model['n_weights']:,}; dropout: {p['dropout']:.2f}.")
-    flow_grid([("Input", f"{p['length']} × {len(model['features'])}", "Jendela riwayat semua kanal terpilih, sudah distandardisasi."),
-               ("Hidden state", f"{p['units']} unit tanh", "State rekuren membawa informasi dari observasi sebelumnya."),
-               ("Output", "1 nilai CO (t+1)", "Lapisan linear, inverse scaling, dan pembatasan nonnegatif.")])
     st.latex(r"h_t=\tanh(W_x x_t+W_h h_{t-1}+b_h),\qquad \widehat{y}_{t+1}=W_y h_t+b_y")
+    fig, ax = chart("Epoch", "MSE pada target baku")
     h = pd.DataFrame(model["history"])
-    with st.container(border=True):
-        st.subheader("Kurva pembelajaran")
-        losses = h.melt("epoch", var_name="Split", value_name="MSE")
-        losses["Split"] = losses.Split.map({"train_mse_z": "Latih", "val_mse_z": "Validasi"})
-        curve = alt.Chart(losses).mark_line(strokeWidth=2.4, point=True).encode(
-            x=alt.X("epoch:Q", title="Epoch", axis=alt.Axis(tickMinStep=1)),
-            y=alt.Y("MSE:Q", title="MSE target baku", scale=alt.Scale(zero=False)),
-            color=alt.Color("Split:N", title=None, scale=alt.Scale(domain=["Latih", "Validasi"],
-                                                                   range=[COLORS[0], COLORS[2]])),
-            tooltip=["Split:N", "epoch:Q", alt.Tooltip("MSE:Q", format=".5f")])
-        ckpt = alt.Chart(pd.DataFrame({"epoch": [model["best_epoch"]]})).mark_rule(
-            color="#718797", strokeDash=[5, 4], size=1.7).encode(x="epoch:Q")
-        show_altair(curve + ckpt, 260)
-        st.caption(f"Checkpoint pada epoch {model['best_epoch']}. MSE ini memakai target yang distandardisasi, "
-                   f"sedangkan RMSE validasi {model['val']['rmse']:.4f} mg/m³ sudah dalam satuan asli.")
-    with st.container(border=True):
-        st.subheader("Aktual dan prediksi")
-        actual_plot(predictions, key, 168)
+    ax.plot(h.epoch, h.train_mse_z, label="Latih", color=COLORS[0], linewidth=1.8)
+    ax.plot(h.epoch, h.val_mse_z, label="Validasi", color=COLORS[2], linewidth=1.8)
+    ax.axvline(model["best_epoch"], color="#656a73", ls=":", label="Checkpoint")
+    ax.legend(frameon=False)
+    draw(fig)
+    st.subheader("Aktual dan prediksi")
+    actual_plot(predictions, key, 168)
     a, b = st.columns(2)
     residual = predictions[key] - predictions.aktual
     with a:
@@ -490,15 +409,11 @@ elif page == PAGES[5]:
     page_title(5, "Fuzzy Inference System", "Mamdani min–max dan centroid: prioritas verifikasi sensor")
     st.warning("Skor 0–100 adalah indeks internal proyek untuk pemantauan sensor, bukan AQI/ISPU resmi, "
                "batas paparan kesehatan, atau rekomendasi keselamatan.")
-    flow_grid([("01 · Fuzzifikasi", "CO menjadi derajat μ", "Fungsi keanggotaan mengevaluasi input konsentrasi."),
-               ("02 · Inferensi", "Min dan max", "Potong keluaran dengan min dan gabungkan semua aturan dengan max."),
-               ("03 · Defuzzifikasi", "Skor centroid", "Hitung titik berat area agregasi pada skala 0–100.")])
     c = st.slider("Konsentrasi CO contoh (mg/m³)", 0., 15., 3., .1)
     score, idx, deg, agg = fuzzy_detail(c)
     metric_row([("CO masukan", f"{c:.1f} mg/m³"), ("Centroid", f"{score:.2f} / 100"), ("Prioritas", LEVELS[idx])])
     left, right = st.columns(2)
     with left:
-        st.subheader("Fungsi keanggotaan input")
         fig, ax = chart("CO (mg/m³)", "Derajat keanggotaan", 3.3, 6)
         x = np.linspace(0, 15, 181)
         for i, vals in enumerate(memberships(x, IN_CENTERS).T):
@@ -508,7 +423,6 @@ elif page == PAGES[5]:
         ax.legend(fontsize=7, ncol=2, frameon=False)
         draw(fig)
     with right:
-        st.subheader("Agregasi keluaran dan centroid")
         fig, ax = chart("Skor prioritas", "Derajat keanggotaan", 3.3, 6)
         for i, vals in enumerate(memberships(GRID, OUT_CENTERS).T):
             ax.plot(GRID, vals, alpha=.6, color=COLORS[i])
@@ -517,11 +431,9 @@ elif page == PAGES[5]:
         ax.legend(frameon=False, fontsize=8)
         draw(fig)
     st.latex(r"s^*=\frac{\int_0^{100}s\,\mu_{agg}(s)\,ds}{\int_0^{100}\mu_{agg}(s)\,ds}")
-    st.subheader("Aktivasi rule base")
     st.dataframe([{"Aturan": f"R{i+1}", "Jika CO": label, "Maka prioritas": label,
                    "Aktivasi": round(deg[i], 3), "Tindak lanjut": ACTIONS[i]} for i, label in enumerate(LEVELS)],
-                 hide_index=True, width="stretch",
-                 column_config={"Aktivasi": st.column_config.ProgressColumn("Aktivasi μ", min_value=0., max_value=1., format="%.3f")})
+                 hide_index=True, width="stretch")
     st.info(f"{LEVELS[idx]} · {ACTIONS[idx]}")
     st.subheader("Pengujian skenario")
     cases = []
@@ -538,21 +450,16 @@ elif page == PAGES[6]:
     key = st.selectbox("Konfigurasi model", list(MODELS), format_func=MODELS.get, index=3)
     spec = info["models"][key]
     length, cols = spec["params"]["length"], spec["features"]
-    note("Model aktif", f"{MODELS[key]} · {length} jam riwayat × {len(cols)} kanal · "
-         f"MAE historis {spec['test']['mae']:.4f} mg/m³. Hasil diberikan pada satu jam setelah observasi terakhir.")
-    flow_grid([("Langkah 01", "Input riwayat", "Gunakan contoh atau unggah CSV sensor dengan timestamp jam penuh."),
-               ("Langkah 02", "Jalankan inference", "Model terlatih membaca input; tidak perlu proses GA/PSO ulang."),
-               ("Langkah 03", "Interpretasi & unduh", "Cek angka CO, kualitas data dan skor fuzzy; ekspor hasil.")])
+    st.info(f"Model menggunakan {length} jam berturut-turut × {len(cols)} kanal. "
+            "Keluaran diprakirakan satu jam setelah observasi terakhir.")
     sample = sample_input(directory, key)
     manual, batch, training = st.tabs(["Input manual", "Unggah CSV", "Pelatihan ulang"])
     with manual:
         st.markdown("**Riwayat sensor (contoh historis dapat diedit)**")
         st.caption("Ganti angka dengan hasil pengukuran Anda. Gunakan timestamp jam penuh tanpa zona waktu, "
-                   "dan isi –200 atau kosong apabila pembacaan hilang. Klik dua kali pada sel untuk mengedit.")
+                   "dan isi –200 atau kosong apabila pembacaan hilang.")
         editor_key = f"manual_{key}_{bundle_hash[:12]}"
-        edited = st.data_editor(sample, hide_index=True, width="stretch", num_rows="fixed", key=editor_key,
-                                column_config={"timestamp": st.column_config.TextColumn("Timestamp input (lokal)", width="medium"),
-                                               **{col: st.column_config.NumberColumn(col, format="%.3f") for col in cols}})
+        edited = st.data_editor(sample, hide_index=True, width="stretch", num_rows="fixed", key=editor_key)
         signature = sha256(edited.to_csv(index=False).encode()).hexdigest()
         state_key = f"prediction_{key}_{bundle_hash[:12]}"
         if st.button("Hitung prakiraan", type="primary"):
@@ -572,8 +479,8 @@ elif page == PAGES[6]:
                 metric_row([("CO (mg/m³)", f"{row.CO_mg_m3:.3f}"), ("Skor pemantauan", f"{row.skor:.2f} / 100"),
                             ("Kelengkapan input", f"{row.kelengkapan_pct:.0f}%")])
                 st.success(f"{row.prioritas} · {row.tindak_lanjut}")
-                note("Referensi galat historis", f"{row.referensi_bawah:.3f} – {row.referensi_atas:.3f} mg/m³ "
-                     "(prakiraan ± persentil ke-90 galat absolut validasi). Ini bukan interval kepercayaan terkalibrasi.")
+                st.caption(f"Referensi galat validasi: {row.referensi_bawah:.3f}–{row.referensi_atas:.3f} mg/m³ "
+                           f"(prakiraan ± persentil ke-90 galat absolut validasi). Ini bukan interval kepercayaan terkalibrasi.")
                 if row.kualitas_input != "Lengkap":
                     st.warning(f"{row.kualitas_input}. {row.jumlah_imputasi} imputasi; "
                                f"{row.di_luar_rentang_latih} pembacaan di luar rentang latih. Verifikasi data masukan.")
@@ -634,25 +541,18 @@ else:
                  best_r2["Model"] if best_r2 is not None else "Target konstan")])
     metric_columns = ["Model", "Fitur", "MAE uji", "RMSE uji", "R² uji", "RMSE validasi", "Bias uji"]
     st.dataframe(model_table[metric_columns].round(4), hide_index=True, width="stretch")
-    with st.container(border=True):
-        st.subheader("Perbandingan galat empat konfigurasi")
-        short = ["Dasar", "GA", "PSO", "GA+PSO"]
-        long = model_table.assign(Konfigurasi=short).melt(["Model", "Konfigurasi"], ["MAE uji", "RMSE uji"],
-                                                          var_name="Metrik", value_name="Galat")
-        encoded = alt.Chart(long).encode(
-            x=alt.X("Konfigurasi:N", sort=short, title=None, axis=alt.Axis(labelAngle=0)),
-            xOffset=alt.XOffset("Metrik:N", sort=["MAE uji", "RMSE uji"]),
-            y=alt.Y("Galat:Q", title="Galat (mg/m³)", scale=alt.Scale(domain=[0, 1.20 * max(long.Galat.max(), .01)])),
-            color=alt.Color("Metrik:N", title=None, scale=alt.Scale(domain=["MAE uji", "RMSE uji"], range=COLORS[:2])),
-            tooltip=["Model:N", "Metrik:N", alt.Tooltip("Galat:Q", format=".4f")])
-        show_altair(encoded.mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5) +
-                    encoded.mark_text(dy=-8, color=INK, fontSize=11).encode(text=alt.Text("Galat:Q", format=".3f")), 260)
-    note("Kesimpulan terukur", f"MAE terendah: {best_mae['Model']}. RMSE terendah: {best_rmse['Model']}. "
-         "Peringkat tidak harus sama pada setiap metrik; fuzzy tidak mengubah galat RNN.", "good")
-    with st.expander("Cara membaca metrik evaluasi"):
-        st.markdown("**MAE** adalah rata-rata nilai absolut selisih prakiraan dan aktual (lebih kecil lebih baik).")
-        st.markdown("**RMSE** adalah akar rata-rata kuadrat selisih; galat besar diberikan penalti lebih tinggi (lebih kecil lebih baik).")
-        st.markdown("**R²** adalah koefisien determinasi, menunjukkan proporsi variasi target yang dijelaskan (lebih tinggi lebih baik).")
+    short = ["Dasar", "GA", "PSO", "GA+PSO"]
+    fig, ax = chart("Konfigurasi", "Galat CO (mg/m³)", 3.4)
+    ix = np.arange(4)
+    for i, col in enumerate(["MAE uji", "RMSE uji"]):
+        bars = ax.bar(ix + (i - .5) * .33, model_table[col], width=.33, color=COLORS[i], label=col)
+        ax.bar_label(bars, fmt="%.3f", fontsize=8, padding=3)
+    ax.set_xticks(ix, short)
+    ax.set_ylim(0, max(model_table["RMSE uji"].max(), .01) * 1.20)
+    ax.legend(frameon=False, ncol=2)
+    draw(fig)
+    st.info(f"MAE terendah: {best_mae['Model']}. RMSE terendah: {best_rmse['Model']}. "
+            "Peringkat tidak harus sama pada setiap metrik; fuzzy tidak mengubah galat RNN.")
     perf = info["persistence"]
     st.caption(f"Pembanding persistensi (CO referensi terakhir): MAE {perf['mae']:.3f}, "
                f"RMSE {perf['rmse']:.3f} mg/m³ dan R² {measure(perf['r2'])}.")
@@ -687,5 +587,3 @@ else:
                       "prediksi_validasi.csv", "text/csv")
     st.caption("Batasan: satu dataset historis, satu split temporal, dan satu inisialisasi untuk pelatihan akhir. "
                "Hasil tidak menjamin kinerja pada kota, tahun, atau sensor yang berbeda.")
-
-footer()
